@@ -4,7 +4,6 @@ import co.touchlab.droidcon.application.gateway.SettingsGateway
 import co.touchlab.droidcon.domain.entity.Conference
 import co.touchlab.droidcon.domain.service.ConferenceConfigProvider
 import co.touchlab.droidcon.domain.service.SyncService
-import co.touchlab.kermit.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,22 +27,22 @@ class WaitForLoadedContextModel(
     val state: StateFlow<State> = _state
     val applicationViewModel by managed(applicationViewModelFactory.create())
 
-    private val log = Logger.withTag("WaitForLoadedContextModel")
-
     suspend fun monitorConferenceChanges() {
         conferenceConfigProvider.loadSelectedConference()
     }
 
     suspend fun watchConferenceChanges() {
+        val isFirstRun = settingsGateway.settings().value.isFirstRun
         lifecycle.whileAttached {
-            withContext(Dispatchers.IO) {
-                try {
+            if (isFirstRun) {
+                withContext(Dispatchers.IO) {
                     syncService.syncConferences()
-                } catch (e: Exception) {
-                    log.e(e) { "Failed to sync conferences" }
+                }
+            } else {
+                launch {
+                    syncService.syncConferences()
                 }
             }
-
             launch {
                 conferenceConfigProvider.observeChanges().collect { conference ->
                     _state.emit(State.Ready(conference))
